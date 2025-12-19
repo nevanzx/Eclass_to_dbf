@@ -1,0 +1,164 @@
+import streamlit as st
+from openpyxl import load_workbook
+from dbf import Table, READ_WRITE
+import tempfile
+import os
+
+# --- Helper function to clean numeric values ---
+def clean_value(val):
+    if val is None:
+        return ''
+    if isinstance(val, (int, float)):
+        return f"{val:.1f}"
+    return val
+
+def process_files(excel_file, dbf_file):
+    """Process the Excel and DBF files based on the original logic"""
+    excel_path = None
+    dbf_path = None
+
+    try:
+        # Save uploaded files to temporary locations
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_excel:
+            tmp_excel.write(excel_file.getvalue())
+            excel_path = tmp_excel.name
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.dbf') as tmp_dbf:
+            tmp_dbf.write(dbf_file.getvalue())
+            dbf_path = tmp_dbf.name
+
+        # Load Excel - using context manager to ensure it's properly closed
+        wb = load_workbook(excel_path, data_only=True)
+        try:
+            ws = wb["FFG"]
+            row = 11
+            excel_data = {}
+
+            while True:
+                cell_val = ws[f'C{row}'].value
+                if cell_val is None:
+                    break
+
+                try:
+                    id_str = str(int(cell_val)).strip()
+                except Exception:
+                    row += 1
+                    continue
+
+                col_h = ws[f'H{row}'].value
+                col_i = ws[f'I{row}'].value
+                excel_data[id_str] = (col_h, col_i)
+                row += 1
+        finally:
+            wb.close()  # Ensure workbook is closed even if an exception occurs
+
+        # Open DBF for read/write
+        table = Table(dbf_path)
+        try:
+            table.open(mode=READ_WRITE)
+
+            id_index = 5  # 5th column, 0-based index
+            target_col3 = 2  # 3rd column (write H)
+            target_col4 = 3  # 4th column (write I)
+
+            matched = 0
+            for record in table:
+                dbf_id = str(record[id_index]).strip()
+                if dbf_id in excel_data:
+                    h_val, i_val = excel_data[dbf_id]
+                    with record:  # <- Required for safe writing
+                        if h_val is not None:
+                            record[target_col3] = clean_value(h_val)
+                        if i_val is not None:
+                            record[target_col4] = clean_value(i_val)
+                    matched += 1
+        finally:
+            table.close()  # Ensure table is closed even if an exception occurs
+
+        # Copy the updated DBF file back to bytes
+        with open(dbf_path, 'rb') as f:
+            updated_dbf_bytes = f.read()
+
+        return updated_dbf_bytes, matched
+
+    finally:
+        # Ensure temporary files are cleaned up in all cases
+        if excel_path and os.path.exists(excel_path):
+            try:
+                os.remove(excel_path)
+            except Exception:
+                # If we can't remove the file, it might be locked by another process
+                pass
+
+        if dbf_path and os.path.exists(dbf_path):
+            try:
+                os.remove(dbf_path)
+            except Exception:
+                # If we can't remove the file, it might be locked by another process
+                pass
+
+
+def main():
+    st.set_page_config(page_title="E-Class DBF Updater", layout="centered")
+    st.title("E-Class DBF Updater")
+
+    # File upload section
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        excel_file = st.file_uploader("E-Class Record (Excel)", type=['xlsx', 'xlsm', 'xls'], key='excel')
+    
+    with col2:
+        if excel_file:
+            st.text("Selected ✓")
+        else:
+            st.text(" ")
+
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        dbf_file = st.file_uploader("Grade Sheet (DBF)", type=['dbf'], key='dbf')
+    
+    with col2:
+        if dbf_file:
+            st.text("Selected ✓")
+        else:
+            st.text(" ")
+
+    # Buttons section
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Clear", type="secondary"):
+            st.session_state.excel = None
+            st.session_state.dbf = None
+            st.rerun()
+    
+    with col2:
+        if st.button("Update DBF", type="primary"):
+            if not excel_file or not dbf_file:
+                st.warning("Please select both files.")
+            else:
+                try:
+                    with st.spinner('Processing files...'):
+                        updated_dbf_bytes, matched_count = process_files(excel_file, dbf_file)
+                    
+                    st.success(f"Successfully processed! Matched and updated {matched_count} rows.")
+                    
+                    # Provide download link for the updated DBF file
+                    st.download_button(
+                        label="Download Updated DBF",
+                        data=updated_dbf_bytes,
+                        file_name="updated_grade_sheet.dbf",
+                        mime="application/octet-stream"
+                    )
+                
+                except Exception as e:
+                    st.error(f"Error processing files: {str(e)}")
+                    # Optionally log the full traceback for debugging
+                    import traceback
+                    st.error(f"Full error details: {traceback.format_exc()}")
+
+
+if __name__ == "__main__":
+    main()
