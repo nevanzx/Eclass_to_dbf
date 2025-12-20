@@ -51,8 +51,8 @@ def process_files(excel_file, dbf_file, original_dbf_filename):
                     row += 1
                     continue
 
-                col_h = ws[f'H{row}'].value
-                col_i = ws[f'I{row}'].value
+                col_h = ws[f'I{row}'].value
+                col_i = ws[f'J{row}'].value
                 excel_data[id_str] = (col_h, col_i)
                 row += 1
         finally:
