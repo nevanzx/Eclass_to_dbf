@@ -6,7 +6,7 @@ import os
 import pandas as pd
 import io
 import base64
-from reports import show_word_report_ui, generate_word_report_from_jle_and_uploaded_dbf, find_matching_dbf_from_jle_data, get_semester_digit
+from reports import show_word_report_ui, convert_word_to_pdf, generate_word_report
 from config import extract_jle_data
 
 # --- Helper function to clean numeric values ---
@@ -451,6 +451,40 @@ def main():
         except Exception as e:
             st.text(f"Error: {str(e)}")
 
+    # Action buttons section in card
+    with st.container(border=True):
+        st.subheader("⚙️ Actions")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if st.button("🔄 Clear All", type="secondary"):
+                # Clear session state variables
+                if 'selected_dbf_file' in st.session_state:
+                    del st.session_state.selected_dbf_file
+                if 'selected_dbf_name' in st.session_state:
+                    del st.session_state.selected_dbf_name
+                if 'excel' in st.session_state:
+                    del st.session_state.excel
+                if 'df' in st.session_state:
+                    del st.session_state.df
+                if 'updated_dbf_bytes' in st.session_state:
+                    del st.session_state.updated_dbf_bytes
+                if 'jle_data' in st.session_state:
+                    del st.session_state.jle_data
+                if 'word_bytes' in st.session_state:
+                    del st.session_state.word_bytes
+                if 'word_filename' in st.session_state:
+                    del st.session_state.word_filename
+                if 'word_report_generated' in st.session_state:
+                    del st.session_state.word_report_generated
+                if 'pdf_from_word_bytes' in st.session_state:
+                    del st.session_state.pdf_from_word_bytes
+                if 'pdf_from_word_filename' in st.session_state:
+                    del st.session_state.pdf_from_word_filename
+                if 'pdf_from_word_generated' in st.session_state:
+                    del st.session_state.pdf_from_word_generated
+                st.rerun()
+
     # Step 3: Select DBF file and update
     with st.container(border=True):
         st.subheader("🔄 Step 3: Select DBF File and Update")
@@ -580,15 +614,15 @@ def main():
                         import traceback
                         st.error(f"Full error details: {traceback.format_exc()}")
 
-                    # After successful update, automatically generate Word report from template
+                    # After successful update, automatically generate Word report from template and convert to PDF
                     if 'df' in st.session_state and st.session_state.df is not None:
                         df = st.session_state.df
 
                         # Get JLE data if available
                         jle_data = st.session_state.get('jle_data', None) if 'jle_data' in st.session_state else None
 
-                        # Generate Word report from template
-                        with st.spinner('Generating Word report from template...'):
+                        # Generate Word report from template and convert to PDF
+                        with st.spinner('Generating Word report from template and converting to PDF...'):
                             try:
                                 # Check if we have JLE data to use the new matching functionality
                                 if jle_data:
@@ -616,40 +650,35 @@ def main():
                                     import io
 
                                     # Extract the document content to check for matching failure
-                                    try:
-                                        with zipfile.ZipFile(io.BytesIO(word_bytes)) as docx_zip:
-                                            # Read the main document XML
-                                            doc_xml = docx_zip.read('word/document.xml')
-                                            doc_content = doc_xml.decode('utf-8', errors='ignore')
+                                    with zipfile.ZipFile(io.BytesIO(word_bytes)) as docx_zip:
+                                        # Read the main document XML
+                                        doc_xml = docx_zip.read('word/document.xml')
+                                        doc_content = doc_xml.decode('utf-8', errors='ignore')
 
-                                            # Check if error indicators are present (meaning matching failed)
-                                            if 'NO MATCH FOUND' in doc_content:
-                                                st.warning("⚠️ Warning: Could not match DBF file with JLE data. Please verify your file naming conventions follow the pattern: ORG_YYYYX_SUBJNUM_SUBJCODE_ID.DBF")
-                                            else:
-                                                # If matching succeeded, let's also check headers/footers
-                                                try:
-                                                    header_footer_content = ""
-                                                    if 'word/header1.xml' in docx_zip.namelist():
-                                                        header_content = docx_zip.read('word/header1.xml').decode('utf-8', errors='ignore')
-                                                        header_footer_content += header_content
-                                                    if 'word/footer1.xml' in docx_zip.namelist():
-                                                        footer_content = docx_zip.read('word/footer1.xml').decode('utf-8', errors='ignore')
-                                                        header_footer_content += footer_content
+                                        # Check if error indicators are present (meaning matching failed)
+                                        if 'NO MATCH FOUND' in doc_content:
+                                            st.warning("⚠️ Warning: Could not match DBF file with JLE data. Please verify your file naming conventions follow the pattern: ORG_YYYYX_SUBJNUM_SUBJCODE_ID.DBF")
+                                        else:
+                                            # If matching succeeded, let's also check headers/footers
+                                            try:
+                                                header_footer_content = ""
+                                                if 'word/header1.xml' in docx_zip.namelist():
+                                                    header_content = docx_zip.read('word/header1.xml').decode('utf-8', errors='ignore')
+                                                    header_footer_content += header_content
+                                                if 'word/footer1.xml' in docx_zip.namelist():
+                                                    footer_content = docx_zip.read('word/footer1.xml').decode('utf-8', errors='ignore')
+                                                    header_footer_content += footer_content
 
-                                                    # Check if [Insert] placeholders still exist in headers/footers (meaning replacement failed there)
-                                                    import re
-                                                    remaining_placeholders = re.findall(r'\[Insert [^\]]*\]', header_footer_content)
-                                                    if remaining_placeholders:
-                                                        st.warning(f"⚠️ Warning: Found {len(remaining_placeholders)} unfilled placeholders in headers/footers: {list(set(remaining_placeholders))[:5]}...")  # Show first 5 unique
-                                                        st.info("This may indicate the template doesn't have the expected [Insert *] placeholders in headers/footers")
-                                                except:
-                                                    pass  # If there's an issue reading headers/footers, continue anyway
-                                    except:
-                                        pass  # If there's an issue reading the docx, continue anyway
-
+                                                # Check if [Insert] placeholders still exist in headers/footers (meaning replacement failed there)
+                                                import re
+                                                remaining_placeholders = re.findall(r'\[Insert [^\]]*\]', header_footer_content)
+                                                if remaining_placeholders:
+                                                    st.warning(f"⚠️ Warning: Found {len(remaining_placeholders)} unfilled placeholders in headers/footers: {list(set(remaining_placeholders))[:5]}...")  # Show first 5 unique
+                                                    st.info("This may indicate the template doesn't have the expected [Insert *] placeholders in headers/footers")
+                                            except:
+                                                pass  # If there's an issue reading headers/footers, continue anyway
                                 else:
                                     # Use the original functionality
-                                    from reports import generate_word_report
                                     word_bytes = generate_word_report(df, jle_data)
 
                                 # Store the Word doc in session state
@@ -657,7 +686,15 @@ def main():
                                 st.session_state.word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
                                 st.session_state.word_report_generated = True
 
-                                st.success("Word report generated successfully!")
+                                # Convert Word to PDF
+                                pdf_from_word_bytes = convert_word_to_pdf(word_bytes)
+
+                                # Store the PDF from Word in session state
+                                st.session_state.pdf_from_word_bytes = pdf_from_word_bytes
+                                st.session_state.pdf_from_word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                                st.session_state.pdf_from_word_generated = True
+
+                                st.success("Word report and PDF generated successfully!")
 
                             except Exception as e:
                                 st.error(f"Error generating Word report: {str(e)}")
@@ -675,20 +712,44 @@ def main():
         # Get JLE data if available
         jle_data = st.session_state.get('jle_data', None) if 'jle_data' in st.session_state else None
 
-        # Show Word report if it was generated
-        if st.session_state.get('word_report_generated', False) and 'word_bytes' in st.session_state:
-            # Show Word report if it was generated
-            with st.container(border=True):
-                st.subheader("📄 Generated Word Report")
+        # Show PDF from Word report if it was generated
+        if st.session_state.get('pdf_from_word_generated', False) and 'pdf_from_word_bytes' in st.session_state:
+            # Create side-by-side layout for DBF viewer and PDF viewer
+            viewer_col1, viewer_col2 = st.columns(2)
 
-                # Download button for Word document
-                st.download_button(
-                    label="📥 Download Word Report",
-                    data=st.session_state.word_bytes,
-                    file_name=st.session_state.word_filename,
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    key="download_word_btn"
-                )
+            with viewer_col1:
+                # Show DBF viewer in its own card
+                with st.container(border=True):
+                    st.subheader("📋 Updated DBF Content")
+                    st.dataframe(df, use_container_width=True, height=400)
+
+            with viewer_col2:
+                # Show PDF from Word report if it was generated
+                with st.container(border=True):
+                    st.subheader("📄 Generated PDF Report")
+                    
+                    # Convert PDF bytes to base64 for embedding in HTML
+                    import base64
+                    pdf_bytes = st.session_state.pdf_from_word_bytes
+                    if isinstance(pdf_bytes, str):
+                        pdf_bytes = pdf_bytes.encode('latin-1')
+                    elif isinstance(pdf_bytes, bytearray):
+                        pdf_bytes = bytes(pdf_bytes)
+
+                    pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
+                    # Embed the PDF in an iframe
+                    pdf_display = f'<iframe src="data:application/pdf;base64,{pdf_base64}" width="100%" height="600" type="application/pdf">'
+                    st.markdown(pdf_display, unsafe_allow_html=True)
+
+                    # Download button for PDF from Word
+                    st.download_button(
+                        label="📥 Download PDF Report",
+                        data=st.session_state.pdf_from_word_bytes,
+                        file_name=st.session_state.pdf_from_word_filename,
+                        mime="application/pdf",
+                        key="download_pdf_from_word_btn"
+                    )
 
 
 if __name__ == "__main__":

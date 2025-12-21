@@ -3,5 +3,4 @@ openpyxl
 dbf
 pandas
 fpdf2
-python-docx
 mammoth

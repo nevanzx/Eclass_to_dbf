@@ -12,7 +12,7 @@ def clean_value(val):
         return f"{val:.1f}"
     return val
 
-def process_files(excel_file, dbf_file):
+def process_files(excel_file, dbf_file, original_dbf_filename):
     """Process the Excel and DBF files based on the original logic"""
     excel_path = None
     dbf_path = None
@@ -30,6 +30,11 @@ def process_files(excel_file, dbf_file):
         # Load Excel - using context manager to ensure it's properly closed
         wb = load_workbook(excel_path, data_only=True)
         try:
+            # Check if the "FFG" worksheet exists
+            if "FFG" not in wb.sheetnames:
+                available_sheets = ", ".join(wb.sheetnames)
+                raise ValueError(f"Worksheet 'FFG' not found. Available sheets: {available_sheets}")
+
             ws = wb["FFG"]
 
             # Find the columns with "EG" and "REMARKS" in row 7
@@ -70,7 +75,8 @@ def process_files(excel_file, dbf_file):
 
                 try:
                     id_str = str(int(cell_val)).strip()
-                except Exception:
+                except (ValueError, TypeError):
+                    # Skip rows where C column doesn't contain a valid integer
                     row += 1
                     continue
 
@@ -128,8 +134,13 @@ def process_files(excel_file, dbf_file):
 
 
 def main():
-    st.set_page_config(page_title="E-Class DBF Updater", layout="centered")
+    st.set_page_config(
+        page_title="E-Class DBF Updater",
+        layout="wide",
+        initial_sidebar_state="collapsed"
+    )
     st.title("E-Class DBF Updater")
+    st.markdown("Upload your E-Class Excel records and DBF grade sheet to update grades automatically.")
 
     # File upload section
     col1, col2 = st.columns([3, 1])
@@ -170,18 +181,24 @@ def main():
             else:
                 try:
                     with st.spinner('Processing files...'):
-                        updated_dbf_bytes, matched_count = process_files(excel_file, dbf_file)
-                    
-                    st.success(f"Successfully processed! Matched and updated {matched_count} rows.")
-                    
+                        updated_dbf_bytes, matched_count = process_files(excel_file, dbf_file, dbf_file.name)
+
+                    if matched_count > 0:
+                        st.success(f"Successfully processed! Matched and updated {matched_count} rows.")
+                    else:
+                        st.warning(f"Files processed but no matches found. This might indicate that the ID values in your Excel file don't match those in your DBF file.")
+
+                    # Use the exact same filename as the input DBF file
+                    output_filename = dbf_file.name
+
                     # Provide download link for the updated DBF file
                     st.download_button(
                         label="Download Updated DBF",
                         data=updated_dbf_bytes,
-                        file_name="updated_grade_sheet.dbf",
+                        file_name=output_filename,
                         mime="application/octet-stream"
                     )
-                
+
                 except Exception as e:
                     st.error(f"Error processing files: {str(e)}")
                     # Optionally log the full traceback for debugging

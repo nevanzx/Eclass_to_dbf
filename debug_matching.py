@@ -24,36 +24,66 @@ def debug_process_files():
         wb = load_workbook(excel_path, data_only=True)  
         print(f"Excel sheets: {wb.sheetnames}")  
   
-        ws = wb["FFG"]  
-        print(f"Using worksheet: FFG")  
-  
-        row = 11  
-        excel_data = {}  
-        print("Reading Excel data from column C ^(ID^) and columns H, I ^(values^):")  
-  
-        while True:  
-            cell_val = ws[f'C{row}'].value  
-            if cell_val is None:  
-                print(f"Stopping at row {row} - cell C{row} is empty")  
-                break  
-  
-            print(f"Row {row}, C{row} = {cell_val}, type: {type(cell_val)}")  
-  
-            try:  
-                # This is the current approach in your code - converting to int  
-                id_str = str(int(cell_val)).strip()  
-                print(f"  Converted ID: {id_str}")  
-            except Exception as e:  
-                print(f"  Skipping row {row} - conversion failed: {e}")  
-                row += 1  
-                continue  
-  
-            col_h = ws[f'H{row}'].value  
-            col_i = ws[f'I{row}'].value  
-            print(f"  H{row} = {col_h}, I{row} = {col_i}")  
-            excel_data[id_str] = (col_h, col_i)  
-            row += 1  
-  
+        ws = wb["FFG"]
+
+        # Find the columns with "EG" and "REMARKS" in row 7
+        col_grade_idx = None
+        col_remark_idx = None
+
+        for col_idx in range(1, ws.max_column + 1):  # Iterate through all columns
+            cell_value = ws.cell(row=7, column=col_idx).value
+            if cell_value and str(cell_value).strip().upper() == "EG":
+                col_grade_idx = col_idx
+            elif cell_value and str(cell_value).strip().upper() == "REMARKS":
+                col_remark_idx = col_idx
+
+        if col_grade_idx is None:
+            raise ValueError("Column with 'EG' header not found in row 7")
+        if col_remark_idx is None:
+            raise ValueError("Column with 'REMARKS' header not found in row 7")
+
+        # Convert column indices to letters for easier reference
+        def col_to_letter(col_num):
+            result = ""
+            while col_num > 0:
+                col_num -= 1
+                result = chr(col_num % 26 + ord('A')) + result
+                col_num //= 26
+            return result
+
+        col_grade_letter = col_to_letter(col_grade_idx)
+        col_remark_letter = col_to_letter(col_remark_idx)
+
+        print(f"Using worksheet: FFG")
+        print(f"Found 'EG' in column {col_grade_letter} and 'REMARKS' in column {col_remark_letter}")
+
+        row = 11
+        excel_data = {}
+        print("Reading Excel data from column C ^(ID^) and dynamic grade/remark columns:")
+
+        while True:
+            cell_val = ws[f'C{row}'].value
+            if cell_val is None:
+                print(f"Stopping at row {row} - cell C{row} is empty")
+                break
+
+            print(f"Row {row}, C{row} = {cell_val}, type: {type(cell_val)}")
+
+            try:
+                # This is the current approach in your code - converting to int
+                id_str = str(int(cell_val)).strip()
+                print(f"  Converted ID: {id_str}")
+            except Exception as e:
+                print(f"  Skipping row {row} - conversion failed: {e}")
+                row += 1
+                continue
+
+            col_grade = ws[f'{col_grade_letter}{row}'].value
+            col_remark = ws[f'{col_remark_letter}{row}'].value
+            print(f"  {col_grade_letter}{row} = {col_grade}, {col_remark_letter}{row} = {col_remark}")
+            excel_data[id_str] = (col_grade, col_remark)
+            row += 1
+
             # Just process first 5 non-empty rows for debugging
             if len(excel_data) >= 5:
                 break

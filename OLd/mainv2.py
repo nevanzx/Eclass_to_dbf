@@ -46,6 +46,35 @@ def button2_action():
         wb = load_workbook(excel_path, data_only=True)
         try:
             ws = wb["FFG"]
+
+            # Find the columns with "EG" and "REMARKS" in row 7
+            col_grade_idx = None
+            col_remark_idx = None
+
+            for col_idx in range(1, ws.max_column + 1):  # Iterate through all columns
+                cell_value = ws.cell(row=7, column=col_idx).value
+                if cell_value and str(cell_value).strip().upper() == "EG":
+                    col_grade_idx = col_idx
+                elif cell_value and str(cell_value).strip().upper() == "REMARKS":
+                    col_remark_idx = col_idx
+
+            if col_grade_idx is None:
+                raise ValueError("Column with 'EG' header not found in row 7")
+            if col_remark_idx is None:
+                raise ValueError("Column with 'REMARKS' header not found in row 7")
+
+            # Convert column indices to letters for easier reference
+            def col_to_letter(col_num):
+                result = ""
+                while col_num > 0:
+                    col_num -= 1
+                    result = chr(col_num % 26 + ord('A')) + result
+                    col_num //= 26
+                return result
+
+            col_grade_letter = col_to_letter(col_grade_idx)
+            col_remark_letter = col_to_letter(col_remark_idx)
+
             row = 11
             excel_data = {}
 
@@ -60,9 +89,9 @@ def button2_action():
                     row += 1
                     continue
 
-                col_h = ws[f'H{row}'].value
-                col_i = ws[f'I{row}'].value
-                excel_data[id_str] = (col_h, col_i)
+                col_grade = ws[f'{col_grade_letter}{row}'].value
+                col_remark = ws[f'{col_remark_letter}{row}'].value
+                excel_data[id_str] = (col_grade, col_remark)
                 row += 1
         finally:
             wb.close()  # Ensure workbook is closed even if an exception occurs
@@ -73,19 +102,19 @@ def button2_action():
             table.open(mode=READ_WRITE)
 
             id_index = 5  # 5th column, 0-based index
-            target_col3 = 2  # 3rd column (write H)
-            target_col4 = 3  # 4th column (write I)
+            target_col3 = 2  # 3rd column (write grade)
+            target_col4 = 3  # 4th column (write remark)
 
             matched = 0
             for record in table:
                 dbf_id = str(record[id_index]).strip()
                 if dbf_id in excel_data:
-                    h_val, i_val = excel_data[dbf_id]
+                    grade_val, remark_val = excel_data[dbf_id]
                     with record:  # <- Required for safe writing
-                        if h_val is not None:
-                            record[target_col3] = clean_value(h_val)
-                        if i_val is not None:
-                            record[target_col4] = clean_value(i_val)
+                        if grade_val is not None:
+                            record[target_col3] = clean_value(grade_val)
+                        if remark_val is not None:
+                            record[target_col4] = clean_value(remark_val)
                     matched += 1
         finally:
             table.close()  # Ensure table is closed even if an exception occurs
