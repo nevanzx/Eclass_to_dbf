@@ -4,5 +4,4 @@ dbf
 pandas
 fpdf2
 python-docx
-docxtopdf
-pywin32
+python-docx2pdf

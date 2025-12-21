@@ -8,8 +8,7 @@ import io
 import json
 import tempfile
 import os
-import pythoncom
-from docxtopdf import convert
+from docx2pdf import convert
 import re
 from dbf import Table
 
@@ -992,27 +991,14 @@ def convert_word_to_pdf(word_bytes):
         pdf_temp_path = pdf_temp.name
 
     try:
-        # Initialize COM before calling docxtopdf
-        pythoncom.CoInitialize()
-
-        # Convert Word to PDF using docxtopdf
+        # Convert Word to PDF using docx2pdf (cross-platform)
         convert(word_temp_path, pdf_temp_path)
-
-        # Uninitialize COM after conversion
-        pythoncom.CoUninitialize()
 
         # Read the PDF content
         with open(pdf_temp_path, 'rb') as pdf_file:
             pdf_bytes = pdf_file.read()
 
         return pdf_bytes
-    except Exception as e:
-        # Ensure COM is unitialized in case of error
-        try:
-            pythoncom.CoUninitialize()
-        except:
-            pass
-        raise e
     finally:
         # Clean up temporary files
         try:
