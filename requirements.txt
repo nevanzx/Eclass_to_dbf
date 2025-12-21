@@ -4,3 +4,4 @@ dbf
 pandas
 fpdf2
 mammoth
+docxtpl
