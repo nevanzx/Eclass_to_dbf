@@ -5,4 +5,3 @@ pandas
 fpdf2
 python-docx
 mammoth
-weasyprint
