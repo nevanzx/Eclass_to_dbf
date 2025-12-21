@@ -1050,8 +1050,18 @@ def convert_word_to_pdf(word_bytes):
                     # Fallback for encoding issues
                     pdf.cell(0, 10, clean_line[:75], ln=True)
 
-    # Get PDF bytes
-    pdf_bytes = pdf.output(dest='S').encode('latin-1')
+    # Get PDF bytes - fpdf.output returns bytes or bytearray, no need to encode
+    pdf_output = pdf.output(dest='S')
+
+    # Ensure we return bytes
+    if isinstance(pdf_output, bytearray):
+        pdf_bytes = bytes(pdf_output)
+    else:
+        # If it's already bytes or string, handle appropriately
+        if isinstance(pdf_output, str):
+            pdf_bytes = pdf_output.encode('latin-1')
+        else:
+            pdf_bytes = pdf_output
 
     return pdf_bytes
 
