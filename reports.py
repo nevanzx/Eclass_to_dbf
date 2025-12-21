@@ -8,7 +8,6 @@ import io
 import json
 import tempfile
 import os
-from docx2pdf import convert
 import re
 from dbf import Table
 
@@ -980,9 +979,15 @@ def generate_word_report(df, jle_data, template_path="Report_template.docx"):
 
 def convert_word_to_pdf(word_bytes):
     """
-    Convert Word document bytes to PDF bytes
+    Convert Word document bytes to PDF bytes using mammoth and weasyprint
+    This is a cross-platform solution that doesn't require Microsoft Word
     """
-    # Create temporary files
+    import mammoth
+    import weasyprint
+    from weasyprint import CSS
+    import os
+
+    # Create a temporary Word file
     with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as word_temp:
         word_temp.write(word_bytes)
         word_temp_path = word_temp.name
@@ -991,8 +996,14 @@ def convert_word_to_pdf(word_bytes):
         pdf_temp_path = pdf_temp.name
 
     try:
-        # Convert Word to PDF using docx2pdf (cross-platform)
-        convert(word_temp_path, pdf_temp_path)
+        # Convert docx to HTML using mammoth
+        with open(word_temp_path, "rb") as docx_file:
+            result = mammoth.convert_to_html(docx_file)
+            html_content = result.value  # The generated HTML
+
+        # Convert HTML to PDF using weasyprint
+        html_doc = weasyprint.HTML(string=html_content)
+        html_doc.write_pdf(pdf_temp_path)
 
         # Read the PDF content
         with open(pdf_temp_path, 'rb') as pdf_file:

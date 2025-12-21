@@ -4,4 +4,5 @@ dbf
 pandas
 fpdf2
 python-docx
-docx2pdf
+mammoth
+weasyprint
