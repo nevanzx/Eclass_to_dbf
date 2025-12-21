@@ -5,3 +5,4 @@ pandas
 fpdf2
 python-docx
 docxtopdf
+pywin32
