@@ -1,3 +1,7 @@
-streamlit  
-openpyxl  
-dbf 
+streamlit
+openpyxl
+dbf
+pandas
+fpdf2
+python-docx
+docxtopdf
