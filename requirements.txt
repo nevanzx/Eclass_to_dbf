@@ -4,4 +4,4 @@ dbf
 pandas
 fpdf2
 python-docx
-python-docx2pdf
+docx2pdf
