@@ -1018,12 +1018,37 @@ def convert_word_to_pdf(word_bytes):
         import re
         clean_line = re.sub('<.*?>', '', line).strip()
         if clean_line:
-            # Handle text that's too long for one line
-            try:
-                pdf.multi_cell(0, 10, clean_line.encode('latin-1', 'replace').decode('latin-1'), 0, 'L')
-            except:
-                # Fallback for encoding issues
-                pdf.multi_cell(0, 10, clean_line[:75], 0, 'L')  # Limit length to avoid issues
+            # Break long lines into smaller chunks to avoid "Not enough horizontal space" error
+            # Get page width and calculate available space
+            page_width = pdf.w - 2 * pdf.l_margin
+            effective_width = page_width - 20  # Leave some margin
+
+            # Calculate approximate character width (this is a rough estimation)
+            # Arial 12pt at 72 DPI is roughly 0.6 points per character, so about 8 chars per inch
+            avg_char_width = pdf.get_string_width("A")  # Get actual character width
+
+            if avg_char_width > 0:
+                max_chars_per_line = int(effective_width / avg_char_width)
+            else:
+                max_chars_per_line = 80  # Fallback if we can't get character width
+
+            # Split long lines
+            if len(clean_line) > max_chars_per_line:
+                # Break into chunks of max_chars_per_line
+                for i in range(0, len(clean_line), max_chars_per_line):
+                    chunk = clean_line[i:i + max_chars_per_line]
+                    try:
+                        pdf.cell(0, 10, chunk.encode('latin-1', 'replace').decode('latin-1'), ln=True)
+                    except:
+                        # Fallback for encoding issues
+                        pdf.cell(0, 10, chunk[:75], ln=True)
+            else:
+                # Short line, add as is
+                try:
+                    pdf.cell(0, 10, clean_line.encode('latin-1', 'replace').decode('latin-1'), ln=True)
+                except:
+                    # Fallback for encoding issues
+                    pdf.cell(0, 10, clean_line[:75], ln=True)
 
     # Get PDF bytes
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
