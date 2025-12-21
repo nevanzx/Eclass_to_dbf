@@ -979,63 +979,52 @@ def generate_word_report(df, jle_data, template_path="Report_template.docx"):
 
 def convert_word_to_pdf(word_bytes):
     """
-    Convert Word document bytes to PDF bytes using different methods depending on environment
-    This is a cross-platform solution that tries multiple approaches
+    Convert Word document bytes to PDF bytes using fpdf2 to create a proper PDF
+    This is a cross-platform solution that works in cloud environments
     """
     import mammoth
     import os
+    from fpdf2 import FPDF
+    from docx import Document
+    import io
 
-    # Create a temporary Word file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as word_temp:
-        word_temp.write(word_bytes)
-        word_temp_path = word_temp.name
-
+    # Extract text from the Word document using mammoth
     try:
-        # Try to use weasyprint if available (for local development)
-        try:
-            import weasyprint
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as pdf_temp:
-                pdf_temp_path = pdf_temp.name
+        with io.BytesIO(word_bytes) as docx_file:
+            result = mammoth.convert_to_html(docx_file)
+            html_content = result.value  # The generated HTML
+    except:
+        # If mammoth fails, try to extract with python-docx
+        with io.BytesIO(word_bytes) as docx_file:
+            doc = Document(docx_file)
+            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+            html_content = "<br>".join(paragraphs)
 
-            # Convert docx to HTML using mammoth
-            with open(word_temp_path, "rb") as docx_file:
-                result = mammoth.convert_to_html(docx_file)
-                html_content = result.value  # The generated HTML
+    # Create a PDF using fpdf2
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
 
-            # Convert HTML to PDF using weasyprint
-            html_doc = weasyprint.HTML(string=html_content)
-            html_doc.write_pdf(pdf_temp_path)
+    # Set font
+    pdf.set_font("Arial", size=12)
 
-            # Read the PDF content
-            with open(pdf_temp_path, 'rb') as pdf_file:
-                pdf_bytes = pdf_file.read()
+    # Add content to PDF
+    # For basic text content, we'll add it line by line
+    # Split HTML content by <br> or newlines
+    lines = html_content.replace('<br>', '\n').replace('<br/>', '\n').replace('<p>', '\n').replace('</p>', '\n').split('\n')
 
-            # Clean up temporary files
-            try:
-                os.remove(pdf_temp_path)
-            except:
-                pass  # Ignore errors during cleanup
+    for line in lines:
+        # Remove HTML tags if any
+        import re
+        clean_line = re.sub('<.*?>', '', line).strip()
+        if clean_line:
+            # Handle text that's too long for one line
+            pdf.multi_cell(0, 10, clean_line.encode('latin-1', 'replace').decode('latin-1'), 0, 'L')
 
-            return pdf_bytes
-        except ImportError:
-            # weasyprint not available, return a simple PDF with a message
-            pass
-        except Exception:
-            # weasyprint available but system libraries missing, return a simple PDF
-            pass
+    # Get PDF bytes
+    pdf_bytes = pdf.output(dest='S').encode('latin-1')
 
-        # If weasyprint is not available or fails, return the original Word document
-        # For a more robust solution, we could use a cloud service or different approach
-        # For now, create a simple PDF with a message about the limitation
-        error_pdf_content = b"%PDF-1.4\n% Produced by alternative PDF method\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n2 0 obj\n<<\n/Type /Pages\n/Kids [3 0 R]\n/Count 1\n>>\nendobj\n3 0 obj\n<<\n/Type /Page\n/Parent 2 0 R\n/MediaBox [0 0 612 792]\n/Contents 4 0 R\n/Resources <<>>\n>>\nendobj\n4 0 obj\n<<\n/Length 44\n>>\nstream\nBT\n/F1 12 Tf\n72 720 Td\n(PDF conversion not fully supported in this environment) Tj\nET\nendstream\nendobj\n5 0 obj\n<<\n/Type /Font\n/Subtype /Type1\n/BaseFont /Helvetica\n>>\nendobj\n6 0 obj\n<<\n/ProcSet [/PDF /Text]\n/Font << /F1 5 0 R >>\n>>\nendobj\ntrailer\n<<\n/Root 1 0 R\n/Size 7\n>>\n%%EOF"
-
-        return error_pdf_content
-    finally:
-        # Clean up temporary file
-        try:
-            os.remove(word_temp_path)
-        except:
-            pass  # Ignore errors during cleanup
+    return pdf_bytes
 
 
 def show_word_report_ui(df, jle_data):
