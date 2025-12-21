@@ -979,12 +979,12 @@ def generate_word_report(df, jle_data, template_path="Report_template.docx"):
 
 def convert_word_to_pdf(word_bytes):
     """
-    Convert Word document bytes to PDF bytes using fpdf2 to create a proper PDF
+    Convert Word document bytes to PDF bytes using fpdf to create a proper PDF
     This is a cross-platform solution that works in cloud environments
     """
     import mammoth
     import os
-    from fpdf2 import FPDF
+    from fpdf import FPDF
     from docx import Document
     import io
 
@@ -1000,7 +1000,7 @@ def convert_word_to_pdf(word_bytes):
             paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
             html_content = "<br>".join(paragraphs)
 
-    # Create a PDF using fpdf2
+    # Create a PDF using fpdf
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -1019,7 +1019,11 @@ def convert_word_to_pdf(word_bytes):
         clean_line = re.sub('<.*?>', '', line).strip()
         if clean_line:
             # Handle text that's too long for one line
-            pdf.multi_cell(0, 10, clean_line.encode('latin-1', 'replace').decode('latin-1'), 0, 'L')
+            try:
+                pdf.multi_cell(0, 10, clean_line.encode('latin-1', 'replace').decode('latin-1'), 0, 'L')
+            except:
+                # Fallback for encoding issues
+                pdf.multi_cell(0, 10, clean_line[:75], 0, 'L')  # Limit length to avoid issues
 
     # Get PDF bytes
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
