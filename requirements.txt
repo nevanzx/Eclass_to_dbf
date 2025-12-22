@@ -2,6 +2,4 @@ streamlit
 openpyxl
 dbf
 pandas
-fpdf2
-mammoth
-docxtpl
+python-docx
