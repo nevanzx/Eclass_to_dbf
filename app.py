@@ -683,7 +683,11 @@ def main():
 
                                 # Store the Word doc in session state
                                 st.session_state.word_bytes = word_bytes
-                                st.session_state.word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
+                                # Use Excel filename for the generated Word document
+                                excel_filename = st.session_state.get('excel_filename', 'unknown')
+                                # Remove the extension and add .docx
+                                base_name = excel_filename.rsplit('.', 1)[0] if '.' in excel_filename else excel_filename
+                                st.session_state.word_filename = f"{base_name}_report.docx"
                                 st.session_state.word_report_generated = True
 
                                 # Store the Word document bytes directly
@@ -691,7 +695,11 @@ def main():
 
                                 # Store the DOCX from Word in session state
                                 st.session_state.docx_from_word_bytes = docx_from_word_bytes
-                                st.session_state.docx_from_word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
+                                # Use Excel filename for the generated Word document
+                                excel_filename = st.session_state.get('excel_filename', 'unknown')
+                                # Remove the extension and add .docx
+                                base_name = excel_filename.rsplit('.', 1)[0] if '.' in excel_filename else excel_filename
+                                st.session_state.docx_from_word_filename = f"{base_name}_report.docx"
                                 st.session_state.docx_from_word_generated = True
 
                                 st.success("Word report generated successfully!")

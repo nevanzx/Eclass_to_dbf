@@ -339,16 +339,20 @@ class WordReport:
                 if parts[0]:
                     paragraph.add_run(parts[0])
 
-                # Add each replacement value in bold
+                # Add each replacement value in bold with Arial font
                 for i in range(len(parts) - 1):
-                    # Add the replacement value in bold
+                    # Add the replacement value in bold with Arial font
                     bold_run = paragraph.add_run(sanitized_value)
                     bold_run.font.bold = True
                     bold_run.font.size = Pt(10)
+                    bold_run.font.name = 'Arial'
 
                     # Add the next part (between this and next occurrence, or after last occurrence)
                     if i + 1 < len(parts) and parts[i + 1]:
-                        paragraph.add_run(parts[i + 1])
+                        # Also make sure the next part uses Arial font
+                        next_run = paragraph.add_run(parts[i + 1])
+                        next_run.font.name = 'Arial'
+                        next_run.font.size = Pt(10)
 
                 # Note: This handles text runs properly by creating new runs for replaced content
 
@@ -690,6 +694,101 @@ class WordReport:
         # If we find at least 3 out of 4 expected headers, consider it a student data table
         return found_headers >= 3
 
+    def apply_borders_to_table(self, table):
+        """
+        Apply borders to all cells in the table
+        """
+        # Apply borders to each cell in the table
+        for row in table.rows:
+            for cell in row.cells:
+                # Access the cell's XML element to modify its properties
+                from docx.oxml.shared import OxmlElement, qn
+
+                # Get the table cell properties element
+                tc_pr = cell._element.tcPr
+
+                # Create a table cell borders element if it doesn't exist
+                tbl_borders = tc_pr.first_child_found_in("w:tcBorders")
+                if tbl_borders is None:
+                    tbl_borders = OxmlElement('w:tcBorders')
+                    tc_pr.append(tbl_borders)
+
+                # Create border elements
+                top_border = OxmlElement('w:top')
+                top_border.set(qn('w:val'), 'single')  # Single line style
+                top_border.set(qn('w:sz'), '4')        # Border size (4 half-points = 1/2pt)
+                top_border.set(qn('w:space'), '0')     # Space
+                top_border.set(qn('w:color'), '000000') # Black color
+                tbl_borders.append(top_border)
+
+                left_border = OxmlElement('w:left')
+                left_border.set(qn('w:val'), 'single')
+                left_border.set(qn('w:sz'), '4')
+                left_border.set(qn('w:space'), '0')
+                left_border.set(qn('w:color'), '000000')
+                tbl_borders.append(left_border)
+
+                bottom_border = OxmlElement('w:bottom')
+                bottom_border.set(qn('w:val'), 'single')
+                bottom_border.set(qn('w:sz'), '4')
+                bottom_border.set(qn('w:space'), '0')
+                bottom_border.set(qn('w:color'), '000000')
+                tbl_borders.append(bottom_border)
+
+                right_border = OxmlElement('w:right')
+                right_border.set(qn('w:val'), 'single')
+                right_border.set(qn('w:sz'), '4')
+                right_border.set(qn('w:space'), '0')
+                right_border.set(qn('w:color'), '000000')
+                tbl_borders.append(right_border)
+
+                # Add horizontal and vertical inner borders
+                inside_h_border = OxmlElement('w:insideH')
+                inside_h_border.set(qn('w:val'), 'single')
+                inside_h_border.set(qn('w:sz'), '4')
+                inside_h_border.set(qn('w:space'), '0')
+                inside_h_border.set(qn('w:color'), '000000')
+                tbl_borders.append(inside_h_border)
+
+                inside_v_border = OxmlElement('w:insideV')
+                inside_v_border.set(qn('w:val'), 'single')
+                inside_v_border.set(qn('w:sz'), '4')
+                inside_v_border.set(qn('w:space'), '0')
+                inside_v_border.set(qn('w:color'), '000000')
+                tbl_borders.append(inside_v_border)
+
+    def copy_borders_from_template_row(self, template_row, target_row):
+        """
+        Apply only bottom border (single 1/2 pt) to target row cells, no left or right borders
+        """
+        from docx.oxml.shared import OxmlElement, qn
+
+        # Apply only bottom border to each cell in the target row
+        for target_cell in target_row.cells:
+            # Access the cell's XML element to modify its properties
+            tc_pr = target_cell._element.tcPr
+
+            # Create a table cell borders element
+            tbl_borders = OxmlElement('w:tcBorders')
+            tc_pr.append(tbl_borders)
+
+            # Create bottom border element (single, 1/2 pt = 4 half-points)
+            bottom_border = OxmlElement('w:bottom')
+            bottom_border.set(qn('w:val'), 'single')  # Single line style
+            bottom_border.set(qn('w:sz'), '4')        # Border size (4 half-points = 1/2pt)
+            bottom_border.set(qn('w:space'), '0')     # Space
+            bottom_border.set(qn('w:color'), '000000') # Black color
+            tbl_borders.append(bottom_border)
+
+            # Explicitly set left and right borders to 'nil' to remove them
+            left_border = OxmlElement('w:left')
+            left_border.set(qn('w:val'), 'nil')  # No border
+            tbl_borders.append(left_border)
+
+            right_border = OxmlElement('w:right')
+            right_border.set(qn('w:val'), 'nil')  # No border
+            tbl_borders.append(right_border)
+
     def fill_student_data_table(self, table, df):
         """
         Fill the student data table with DataFrame content, handling pagination
@@ -735,6 +834,8 @@ class WordReport:
                 # Need to add a new row
                 new_row = table.add_row()
                 target_row = new_row
+                # Copy border styles from the template row to the new row
+                self.copy_borders_from_template_row(template_row, target_row)
             else:
                 target_row = table.rows[target_row_idx]
 
@@ -753,6 +854,13 @@ class WordReport:
 
                 # Sanitize the text to ensure it's XML compatible
                 cell.text = self.sanitize_text_for_xml(cell.text)
+
+                # Set font to Arial 10 and make all cell content bold
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        run.font.name = 'Arial'
+                        run.font.size = Pt(10)
+                        run.font.bold = True
 
 
         # Calculate statistics based on the remarks column
@@ -827,7 +935,7 @@ class WordReport:
 
         # Add the label text to the run (not bold)
         text_element_label = OxmlElement('w:t')
-        text_element_label.text = "STATISTICS   :   "
+        text_element_label.text = "STATISTICS   :"
         run_element_label.append(text_element_label)
 
         # Add a run to the paragraph for the values
@@ -855,9 +963,9 @@ class WordReport:
 
         run_element_values.append(rPr_values)
 
-        # Add the values text to the run
+        # Add the values text to the run (with 3 spaces before "Passed")
         text_element_values = OxmlElement('w:t')
-        text_element_values.text = f"Passed={passed_count}  No Grade={no_grade_count}  Failed={failed_count}  Dropped={dropped_count}  TOTAL={total_count}"
+        text_element_values.text = f"   Passed={passed_count}  No Grade={no_grade_count}  Failed={failed_count}  Dropped={dropped_count}  TOTAL={total_count}"
         run_element_values.append(text_element_values)
 
         # If there are more records than available rows, the method already handles this by adding rows
@@ -1064,7 +1172,7 @@ def get_word_bytes(word_bytes):
     return word_bytes
 
 
-def show_word_report_ui(df, jle_data):
+def show_word_report_ui(df, jle_data, excel_filename=None):
     """
     Display the Word report UI
     """
@@ -1084,16 +1192,28 @@ def show_word_report_ui(df, jle_data):
                 word_bytes = generate_word_report(df, jle_data)
 
                 # Store the Word doc in session state
+                # Use Excel filename for the generated Word document if provided
+                if excel_filename:
+                    base_name = excel_filename.rsplit('.', 1)[0] if '.' in excel_filename else excel_filename
+                    st.session_state.word_filename = f"{base_name}_report.docx"
+                else:
+                    st.session_state.word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
+
                 st.session_state.word_bytes = word_bytes
-                st.session_state.word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
                 st.session_state.word_report_generated = True
 
                 # Store the Word document directly (no PDF conversion needed)
                 docx_bytes = word_bytes
 
                 # Store the DOCX in session state
+                # Use Excel filename for the generated Word document if provided
+                if excel_filename:
+                    base_name = excel_filename.rsplit('.', 1)[0] if '.' in excel_filename else excel_filename
+                    st.session_state.docx_from_word_filename = f"{base_name}_report.docx"
+                else:
+                    st.session_state.docx_from_word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
+
                 st.session_state.docx_from_word_bytes = docx_bytes
-                st.session_state.docx_from_word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
                 st.session_state.docx_from_word_generated = True
 
                 st.success("Word report generated successfully!")
@@ -1125,7 +1245,7 @@ def show_word_report_ui(df, jle_data):
         )
 
 
-def show_jle_dbf_report_ui(jle_file_path):
+def show_jle_dbf_report_ui(jle_file_path, excel_filename=None):
     """
     Display the Word report UI for JLE/DBF workflow
     """
@@ -1145,16 +1265,28 @@ def show_jle_dbf_report_ui(jle_file_path):
                 word_bytes = generate_word_report_from_jle_dbf(jle_file_path)
 
                 # Store the Word doc in session state
+                # Use Excel filename for the generated Word document if provided
+                if excel_filename:
+                    base_name = excel_filename.rsplit('.', 1)[0] if '.' in excel_filename else excel_filename
+                    st.session_state.jle_dbf_word_filename = f"{base_name}_report.docx"
+                else:
+                    st.session_state.jle_dbf_word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
+
                 st.session_state.jle_dbf_word_bytes = word_bytes
-                st.session_state.jle_dbf_word_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
                 st.session_state.jle_dbf_word_report_generated = True
 
                 # Store the Word document directly (no PDF conversion needed)
                 docx_bytes = word_bytes
 
                 # Store the DOCX in session state
+                # Use Excel filename for the generated Word document if provided
+                if excel_filename:
+                    base_name = excel_filename.rsplit('.', 1)[0] if '.' in excel_filename else excel_filename
+                    st.session_state.jle_dbf_docx_filename = f"{base_name}_report.docx"
+                else:
+                    st.session_state.jle_dbf_docx_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
+
                 st.session_state.jle_dbf_docx_bytes = docx_bytes
-                st.session_state.jle_dbf_docx_filename = f"E-Class_Report_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.docx"
                 st.session_state.jle_dbf_docx_generated = True
 
                 st.success("Word report generated successfully from JLE/DBF data!")
