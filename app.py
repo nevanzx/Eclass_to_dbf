@@ -342,16 +342,6 @@ def main():
 
         st.info("Note: Upload one JLE file and multiple DBF files together, then select which DBF file to process.")
 
-        # Mobile-specific instructions
-        st.warning("📱 **Mobile/Tablet Users (iOS/Safari, Chrome Mobile)**: If you're having trouble uploading multiple files, try these tips:")
-        st.markdown("""
-        - On iOS Safari: Tap and hold on the upload area to select multiple files
-        - On Chrome Mobile: Hold down on the first file, then tap additional files to select multiple
-        - Try using Firefox mobile if Chrome doesn't work (known to work better)
-        - Make sure you have sufficient storage space on your device
-        - If issues persist, try using desktop browser instead
-        """)
-
     # Card-based layout for Steps 1 and 2
     col1, col2 = st.columns(2)
 
