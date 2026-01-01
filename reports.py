@@ -665,12 +665,12 @@ class WordReport:
     def populate_student_data_table(self, df):
         """
         Populate the student data table with records from the DataFrame.
-        The table should have columns: No., Name, Grade, Remarks
-        Duplicate rows as needed up to 23 per page, then continue on next page.
+        The table should have at least 5 columns: No., Name, Grade, [empty], Remarks
+        Duplicate rows as needed to accommodate all student records.
         """
         # Find the table that contains student data (look for tables that might have student info)
         for table in self.doc.tables:
-            # Check if this table is likely the student data table by looking for expected headers
+            # Check if this table is likely the student data table by checking if it has at least 5 columns
             if self.is_student_data_table(table):
                 # Process the student data table
                 self.fill_student_data_table(table, df)
@@ -678,21 +678,17 @@ class WordReport:
 
     def is_student_data_table(self, table):
         """
-        Check if a table is likely the student data table by looking for expected headers
+        Check if a table is likely the student data table by checking if it has at least 5 columns
+        We expect at least 5 columns for student data: No., Name, Grade, [empty], Remarks
         """
         if not table.rows:
             return False
 
-        # Look at the first row for headers like "No.", "Name", "Grade", "Remarks"
-        first_row = table.rows[0]
-        row_text = " ".join(cell.text for cell in first_row.cells).upper()
-
-        # Check if it contains expected column names
-        expected_headers = ["NO", "NAME", "GRADE", "REMARKS"]
-        found_headers = sum(1 for header in expected_headers if header in row_text)
-
-        # If we find at least 3 out of 4 expected headers, consider it a student data table
-        return found_headers >= 3
+        # Check if any row has at least 5 cells (for student number, name, grade, empty, remarks)
+        for row in table.rows:
+            if len(row.cells) >= 5:
+                return True
+        return False
 
     def apply_borders_to_table(self, table):
         """
@@ -794,63 +790,74 @@ class WordReport:
         Fill the student data table with DataFrame content, handling pagination
         Each page holds up to 23 records, then continues on the next page if needed.
         """
-        # Get the header row (first row) and the template row (second row, usually empty)
-        if len(table.rows) < 2:
-            return  # Need at least header and one data row
-
-        header_row = table.rows[0]
-
-        # Find the template row (usually the second row with placeholders like [Insert NAME], etc.)
-        template_row_idx = 1
-        template_row = table.rows[template_row_idx]
-
-        # Store the original template row for duplication
-        original_cells = [cell.text for cell in template_row.cells]
-
-        # Clear the template row content to prepare for data insertion
-        for cell in template_row.cells:
-            cell.text = ""
-
-        # Get the DataFrame columns that correspond to student data
-        # Look for common column names in the DataFrame
-        name_col = self.find_column_name(df, ['name', 'student_name', 'studname', 'lastname', 'student'])
-        grade_col = self.find_column_name(df, ['grade', 'eg', 'score', 'mark'])
-        remarks_col = self.find_column_name(df, ['remarks', 'remark', 'comment', 'status'])
+        # Identify the appropriate columns for Name, Grade, and Remark
+        name_col = self.find_column_name(df, ['name', 'student', 'stud', 'fullname', 'full_name', 'first_name', 'last_name', 'lname', 'fname'])
+        grade_col = self.find_column_name(df, ['grade', 'h', 'g', 'score', 'result', 'mark'])
+        remark_col = self.find_column_name(df, ['remark', 'i', 'remarks', 'status', 'comment', 'comments'])
 
         # Add row numbers column
         df_with_numbers = df.copy()
         df_with_numbers.insert(0, 'row_number', range(1, len(df_with_numbers) + 1))
-        number_col = 'row_number'
 
         # Process each student record with pagination (max 23 records per page)
         records_per_page = 23
 
         for idx, row in df_with_numbers.iterrows():
             # Determine which row in the table to use
-            target_row_idx = template_row_idx + idx  # Sequentially add records to rows
+            target_row_idx = idx  # Start from the first row (0-indexed)
 
             # Check if we need to add a new row
             if target_row_idx >= len(table.rows):
                 # Need to add a new row
                 new_row = table.add_row()
                 target_row = new_row
-                # Copy border styles from the template row to the new row
-                self.copy_borders_from_template_row(template_row, target_row)
+                # Copy border styles from the first row to the new row (if there's an existing row to copy from)
+                if len(table.rows) > 1:
+                    # Use the first data row as template (if it exists)
+                    first_row_idx = 0
+                    if len(table.rows) > first_row_idx + 1:  # Make sure we have a row to copy from
+                        template_row = table.rows[first_row_idx]
+                        self.copy_borders_from_template_row(template_row, target_row)
             else:
                 target_row = table.rows[target_row_idx]
 
-            # Fill the row with data
+            # Fill the row with data using column positions:
+            # Column 0: Number (row index)
+            # Column 1: Name (determined by find_column_name)
+            # Column 2: Grade (determined by find_column_name)
+            # Column 3: Empty (should be empty)
+            # Column 4: Remarks (determined by find_column_name)
             for cell_idx, cell in enumerate(target_row.cells):
                 if cell_idx == 0:  # Number column
-                    cell.text = str(row[number_col]) if number_col in row else str(idx + 1)
+                    cell.text = str(row['row_number'])
                 elif cell_idx == 1:  # Name column
-                    cell.text = str(row[name_col]) if name_col and name_col in row else ""
+                    name_value = ""
+                    if name_col and name_col in df.columns:
+                        name_value = str(row[name_col]) if pd.notna(row[name_col]) else ""
+                    elif len(df.columns) >= 1:
+                        # Fallback to first column if name column not found
+                        name_value = str(df.iloc[idx, 0]) if pd.notna(df.iloc[idx, 0]) else ""
+                    cell.text = name_value
                 elif cell_idx == 2:  # Grade column
-                    cell.text = str(row[grade_col]) if grade_col and grade_col in row else ""
-                elif cell_idx == 3:  # Additional column (originally would be Remarks, but now shifted)
-                    cell.text = ""  # Leave as empty since we're shifting remarks to the right
-                elif cell_idx == 4:  # Remarks column (offset one position to the right)
-                    cell.text = str(row[remarks_col]) if remarks_col and remarks_col in row else ""
+                    grade_value = ""
+                    if grade_col and grade_col in df.columns:
+                        grade_value = str(row[grade_col]) if pd.notna(row[grade_col]) else ""
+                    elif len(df.columns) >= 2:
+                        # Fallback to second column if grade column not found
+                        grade_value = str(df.iloc[idx, 1]) if pd.notna(df.iloc[idx, 1]) else ""
+                    cell.text = grade_value
+                elif cell_idx == 3:  # Additional column (empty)
+                    cell.text = ""
+                elif cell_idx == 4:  # Remarks column
+                    remark_value = ""
+                    if remark_col and remark_col in df.columns:
+                        remark_value = str(row[remark_col]) if pd.notna(row[remark_col]) else ""
+                    elif len(df.columns) >= 3:
+                        # Fallback to third column if remark column not found
+                        remark_value = str(df.iloc[idx, 2]) if pd.notna(df.iloc[idx, 2]) else ""
+                    cell.text = remark_value
+                elif cell_idx >= 5:  # Additional columns beyond the 5th
+                    cell.text = ""
 
                 # Sanitize the text to ensure it's XML compatible
                 cell.text = self.sanitize_text_for_xml(cell.text)
@@ -864,35 +871,33 @@ class WordReport:
 
 
         # Calculate statistics based on the remarks column
-        if remarks_col and remarks_col in df_with_numbers.columns:
-            remarks_values = df_with_numbers[remarks_col].astype(str).str.upper()
+        remarks_values = pd.Series(dtype='object')  # Initialize empty series
+        if remark_col and remark_col in df.columns:
+            # Use the identified remark column
+            remarks_values = df[remark_col].astype(str).str.upper()
+        elif len(df.columns) > 2:  # Fallback to 3rd column (index 2) if remark column not found
+            remarks_values = df.iloc[:, 2].astype(str).str.upper()
 
-            # Count each category separately to avoid double counting
-            passed_count = 0
-            no_grade_count = 0
-            failed_count = 0
-            dropped_count = 0
+        # Count each category separately to avoid double counting
+        passed_count = 0
+        no_grade_count = 0
+        failed_count = 0
+        dropped_count = 0
 
-            for value in remarks_values:
-                # Check each category separately and only count once per value
-                value_str = str(value) if value is not None and pd.notna(value) else ""
-                if 'PASSED' in value_str or 'PASS' in value_str or 'OK' in value_str or 'COMPLETED' in value_str:
-                    passed_count += 1
-                elif 'NO GRADE' in value_str or 'N/A' in value_str or 'NO REMARK' in value_str or 'NONE' in value_str or 'INC' in value_str or 'INCOMPLETE' in value_str:
-                    no_grade_count += 1
-                elif 'FAILED' in value_str or 'FAIL' in value_str:
-                    failed_count += 1
-                elif 'DROPPED' in value_str or 'DROP' in value_str or 'WITHDRAWN' in value_str or 'WITHDREW' in value_str or 'DRP' in value_str:
-                    dropped_count += 1
-        else:
-            # If no remarks column, default to zero counts
-            passed_count = 0
-            no_grade_count = 0
-            failed_count = 0
-            dropped_count = 0
+        for value in remarks_values:
+            # Check each category separately and only count once per value
+            value_str = str(value) if value is not None and pd.notna(value) else ""
+            if 'PASSED' in value_str or 'PASS' in value_str or 'OK' in value_str or 'COMPLETED' in value_str:
+                passed_count += 1
+            elif 'NO GRADE' in value_str or 'N/A' in value_str or 'NO REMARK' in value_str or 'NONE' in value_str or 'INC' in value_str or 'INCOMPLETE' in value_str:
+                no_grade_count += 1
+            elif 'FAILED' in value_str or 'FAIL' in value_str:
+                failed_count += 1
+            elif 'DROPPED' in value_str or 'DROP' in value_str or 'WITHDRAWN' in value_str or 'WITHDREW' in value_str or 'DRP' in value_str:
+                dropped_count += 1
 
         # Total number of students is the length of the dataframe
-        total_count = len(df_with_numbers)
+        total_count = len(df)
 
         # Add statistics text after the table (outside the table)
         # Find the table's parent element and add the paragraph after it
